@@ -1,0 +1,77 @@
+version: '3'
+
+services:
+  vaultwarden:
+    image: vaultwarden/server
+    volumes:
+      - /share/vaultwarden:/data   # Create a share folder named `vaultwarden`
+    environment:
+      - VIRTUAL_HOST=example.myqnapcloud.com          # Your myQNAPCloud domain
+      - LETSENCRYPT_HOST=example.myqnapcloud.com      # Your myQNAPCloud domain
+      - WEBSOCKET_ENABLED=true
+      - SIGNUPS_ALLOWED=true                          # Set to false when you want to disable account registration
+      - DOMAIN=https://example.myqnapcloud.com:8443   # Your myQNAPCloud domain and public port
+      ### Below is optional ###
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_FROM=example@gmail.com
+      - SMTP_FROM_NAME=Vaultwarden
+      - SMTP_PORT=587
+      - SMTP_SSL=true
+      - SMTP_USERNAME=example@gmail.com
+      - SMTP_PASSWORD=xxxxxxxxxxxxxxxxx   # Use an app password for Gmail (https://support.google.com/mail/answer/185833)
+      - SMTP_TIMEOUT=15
+
+  nginx-proxy-custom-config:
+    image: busybox
+    volumes:
+      - conf:/etc/nginx/conf.d
+      - vhost:/etc/nginx/vhost.d
+    command: |
+      sh -c "
+        echo 'proxy_read_timeout 1200s;' > /etc/nginx/conf.d/my_proxy.conf &&
+        echo '
+          location /notifications/hub {
+            proxy_pass http://vaultwarden:3012;
+            proxy_set_header Upgrade $$http_upgrade;
+            proxy_set_header Connection "upgrade";
+          }
+          location /notifications/hub/negotiate {
+            proxy_pass http://vaultwarden:80;
+          }
+        ' > /etc/nginx/vhost.d/default
+      "
+
+  nginx-proxy:
+    depends_on:
+      - nginx-proxy-custom-config
+    image: nginxproxy/nginx-proxy
+    ports:
+      - '8443:443'   # Specify the desired public port on the left hand
+    volumes:
+      - conf:/etc/nginx/conf.d
+      - vhost:/etc/nginx/vhost.d
+      - dhparam:/etc/nginx/dhparam
+      - certs:/etc/nginx/certs:ro
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    labels:
+      - 'com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy'
+
+  acme-companion:
+    depends_on: 
+      - nginx-proxy
+    image: nginxproxy/acme-companion
+    volumes:
+      - vhost:/etc/nginx/vhost.d
+      - certs:/etc/nginx/certs
+      - /share/Web:/usr/share/nginx/html
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - acme:/etc/acme.sh
+    environment:
+      - DEFAULT_EMAIL=example@gmail.com   # Specify what address you used in the Let's Encrypt configuration of myQNAPCloud
+
+volumes:
+  conf:
+  vhost:
+  dhparam:
+  certs:
+  acme:
