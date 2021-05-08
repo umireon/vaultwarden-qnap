@@ -10,6 +10,7 @@ services:
       - LETSENCRYPT_HOST=example.myqnapcloud.com      # Your myQNAPCloud domain
       - WEBSOCKET_ENABLED=true
       - SIGNUPS_ALLOWED=true                          # Set to false when you want to disable account registration
+      - SIGNUPS_VERIFY=true
       - DOMAIN=https://example.myqnapcloud.com:8443   # Your myQNAPCloud domain and public port
       ### Below is optional ###
       - SMTP_HOST=smtp.gmail.com
