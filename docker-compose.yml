@@ -3,6 +3,7 @@ version: '3'
 services:
   vaultwarden:
     image: vaultwarden/server
+    restart: always
     volumes:
       - /share/vaultwarden:/data   # Create a share folder named `vaultwarden`
     environment:
@@ -45,6 +46,7 @@ services:
   nginx-proxy:
     depends_on:
       - nginx-proxy-custom-config
+    restart: always
     image: nginxproxy/nginx-proxy
     ports:
       - '8443:443'   # Specify the desired public port on the left hand
