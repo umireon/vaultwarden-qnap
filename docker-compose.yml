@@ -14,13 +14,13 @@ services:
       - SIGNUPS_VERIFY=true
       - DOMAIN=https://example.myqnapcloud.com:8443   # Your myQNAPCloud domain and public port
       ### Below is optional ###
-      - SMTP_HOST=smtp.gmail.com
-      - SMTP_FROM=example@gmail.com
+      - SMTP_HOST=smtp.mailgun.org
+      - SMTP_FROM=postmaster@YOUR_DOMAIN_NAME
       - SMTP_FROM_NAME=Vaultwarden
       - SMTP_PORT=587
       - SMTP_SSL=true
-      - SMTP_USERNAME=example@gmail.com
-      - SMTP_PASSWORD=xxxxxxxxxxxxxxxxx   # Use an app password for Gmail (https://support.google.com/mail/answer/185833)
+      - SMTP_USERNAME=postmaster@YOUR_DOMAIN_NAME
+      - SMTP_PASSWORD=xxxxxxxxxxxxxxxxxxxxxxxxxxx
       - SMTP_TIMEOUT=15
 
   nginx-proxy-custom-config:
