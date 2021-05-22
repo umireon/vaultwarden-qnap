@@ -40,7 +40,8 @@ services:
           location /notifications/hub/negotiate {
             proxy_pass http://vaultwarden:80;
           }
-        ' > /etc/nginx/vhost.d/default
+        ' > /etc/nginx/vhost.d/default &&
+        while :; do sleep 2073600; done
       "
 
   nginx-proxy:
