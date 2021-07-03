@@ -1,82 +1,92 @@
-version: '3'
+version: '3.9'
 
 services:
-  vaultwarden:
-    image: vaultwarden/server
-    restart: always
+  traefik-config:
+    image: 'busybox'
     volumes:
-      - /share/vaultwarden:/data   # Create a share folder named `vaultwarden`
-    environment:
-      - VIRTUAL_HOST=example.myqnapcloud.com          # Your myQNAPCloud domain
-      - LETSENCRYPT_HOST=example.myqnapcloud.com      # Your myQNAPCloud domain
-      - WEBSOCKET_ENABLED=true
-      - SIGNUPS_ALLOWED=true                          # Set to false when you want to disable account registration
-      - SIGNUPS_VERIFY=true
-      - DOMAIN=https://example.myqnapcloud.com:8443   # Your myQNAPCloud domain and public port
-      ### Below is optional ###
-      - SMTP_HOST=smtp.mailgun.org
-      - SMTP_FROM=postmaster@YOUR_DOMAIN_NAME
-      - SMTP_FROM_NAME=Vaultwarden
-      - SMTP_PORT=587
-      - SMTP_SSL=true
-      - SMTP_USERNAME=postmaster@YOUR_DOMAIN_NAME
-      - SMTP_PASSWORD=xxxxxxxxxxxxxxxxxxxxxxxxxxx
-      - SMTP_TIMEOUT=15
-
-  nginx-proxy-custom-config:
-    image: busybox
-    volumes:
-      - conf:/etc/nginx/conf.d
-      - vhost:/etc/nginx/vhost.d
+      - 'traefik:/traefik'
     command: |
       sh -c "
-        echo 'proxy_read_timeout 1200s;' > /etc/nginx/conf.d/my_proxy.conf &&
-        echo '
-          location /notifications/hub {
-            proxy_pass http://vaultwarden:3012;
-            proxy_set_header Upgrade $$http_upgrade;
-            proxy_set_header Connection \"upgrade\";
-          }
-          location /notifications/hub/negotiate {
-            proxy_pass http://vaultwarden:80;
-          }
-        ' > /etc/nginx/vhost.d/default &&
-        while :; do sleep 2073600; done
-      "
+      echo '
+      http:
+        services:
+          nasweb:
+            loadBalancer:
+              servers:
+                - url: http://gateway.docker.internal:8080
+        routers:
+          nasweb:
+            rule: Host(`example.myqnapcloud.com`)
+            service: nasweb
+            tls:
+              certresolver: myresolver
+          defaulthost:
+            rule: PathPrefix(`/`)
+            service: nasweb
+            tls:
+              certresolver: myresolver
+              domains:
+                main: example.myqnapcloud.com
+      ' > /traefik/config.yml && nc -l -p 3000"
 
-  nginx-proxy:
+  traefik:
     depends_on:
-      - nginx-proxy-custom-config
-    restart: always
-    image: nginxproxy/nginx-proxy
+      - 'traefik-config'
+    image: 'traefik:v2.4'
+    restart: 'always'
+    command:
+      - '--api.insecure=true'
+      - '--providers.docker=true'
+      - '--providers.docker.exposedbydefault=false'
+      - '--providers.file=true'
+      - '--providers.file.filename=/traefik/config.yml'
+      - '--providers.file.watch=true'
+      - '--entrypoints.websecure.address=:443'
+      - '--entrypoints.traefik.address=:3000'
+      - '--certificatesresolvers.myresolver.acme.tlschallenge=true'
+      - '--certificatesresolvers.myresolver.acme.email=example@gmail.com'
+      - '--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json'
     ports:
-      - '8443:443'   # Specify the desired public port on the left hand
+      - '443:443'
+      - '3000:3000'
     volumes:
-      - conf:/etc/nginx/conf.d
-      - vhost:/etc/nginx/vhost.d
-      - dhparam:/etc/nginx/dhparam
-      - certs:/etc/nginx/certs:ro
-      - /var/run/docker.sock:/tmp/docker.sock:ro
-    labels:
-      - 'com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy'
+      - '/share/letsencrypt:/letsencrypt'   # Create a share folder named `letsencrypt`
+      - 'traefik:/traefik'
+      - '/var/run/docker.sock:/var/run/docker.sock:ro'
+    extra_hosts:
+      - 'gateway.docker.internal:host-gateway'
 
-  acme-companion:
-    depends_on: 
-      - nginx-proxy
-    restart: always
-    image: nginxproxy/acme-companion
+  vaultwarden:
+    image: 'vaultwarden/server'
+    restart: 'always'
     volumes:
-      - vhost:/etc/nginx/vhost.d
-      - certs:/etc/nginx/certs
-      - /share/Web:/usr/share/nginx/html
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - acme:/etc/acme.sh
+      - '/share/vaultwarden:/data'   # Create a share folder named `vaultwarden`
     environment:
-      - DEFAULT_EMAIL=example@gmail.com   # Specify what address you used in the Let's Encrypt configuration of myQNAPCloud
+      - 'WEBSOCKET_ENABLED=true'
+      - 'SIGNUPS_ALLOWED=false'      # Set to false when you want to disable account registration
+      - 'SIGNUPS_VERIFY=true'
+      - 'DOMAIN=https://vaultwarden.example.com'
+      - 'SMTP_HOST=smtp.mailgun.org'
+      - 'SMTP_FROM=postmaster@YOUR_DOMAIN_NAME'
+      - 'SMTP_FROM_NAME=Vaultwarden'
+      - 'SMTP_PORT=587'
+      - 'SMTP_SSL=true'
+      - 'SMTP_USERNAME=postmaster@YOUR_DOMAIN_NAME'
+      - 'SMTP_PASSWORD=xxxxxxxxxxxxxxxxxxxxxxxxxxx'
+      - 'SMTP_TIMEOUT=15'
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.vaultwarden-ui.rule=Host(`vaultwarden.example.com`)'
+      - 'traefik.http.routers.vaultwarden-ui.service=vaultwarden-ui'
+      - 'traefik.http.routers.vaultwarden-ui.tls.certresolver=myresolver'
+      - 'traefik.http.services.vaultwarden-ui.loadbalancer.server.port=80'
+      - 'traefik.http.routers.vaultwarden-websocket.rule=Host(`vaultwarden.example.com`) && Path(`/notifications/hub`)'
+      - 'traefik.http.routers.vaultwarden-websocket.service=vaultwarden-websocket'
+      - 'traefik.http.routers.vaultwarden-websocket.tls.certresolver=myresolver'
+      - 'traefik.http.services.vaultwarden-websocket.loadbalancer.server.port=3012'
+      - 'traefik.http.routers.vaultwarden-negotiate.rule=Host(`vaultwarden.example.com`) && Path(`/notifications/hub/negotiate`)'
+      - 'traefik.http.routers.vaultwarden-negotiate.service=vaultwarden-ui'
+      - 'traefik.http.routers.vaultwarden-negotiate.tls.certresolver=myresolver'
 
 volumes:
-  conf:
-  vhost:
-  dhparam:
-  certs:
-  acme:
+  traefik:
