@@ -1,0 +1,99 @@
+version: '3.9'
+
+services:
+  traefik-config:
+    image: 'busybox'
+    volumes:
+      - 'traefik:/traefik'
+    command: |
+      sh -c "
+      echo '
+      http:
+        services:
+          nasweb:
+            loadBalancer:
+              servers:
+                - url: http://gateway.docker.internal:8080
+        routers:
+          nasweb:
+            rule: Host(`example.myqnapcloud.com`)
+            service: nasweb
+            tls:
+              certresolver: myresolver
+          default:
+            rule: PathPrefix(`/`)
+            service: nasweb
+            tls:
+              certresolver: myresolver
+              domains:
+                - main: example.myqnapcloud.com
+      ' > /traefik/config.yml && nc -l -p 3000"
+
+  traefik:
+    depends_on:
+      - 'traefik-config'
+    image: 'traefik:v2.4'
+    restart: 'always'
+    command:
+      - '--api.insecure=true'
+      - '--providers.docker=true'
+      - '--providers.docker.exposedbydefault=false'
+      - '--providers.file=true'
+      - '--providers.file.filename=/traefik/config.yml'
+      - '--providers.file.watch=true'
+      - '--entrypoints.websecure.address=:443'
+      - '--entrypoints.traefik.address=:3000'
+      - '--certificatesresolvers.nasweb.acme.tlschallenge=true'
+      - '--certificatesresolvers.nasweb.acme.email=root@example.com'
+      - '--certificatesresolvers.nasweb.acme.storage=/letsencrypt/acme-nasweb.json'
+      - '--certificatesresolvers.myresolver.acme.dnschallenge=true'
+      - '--certificatesresolvers.myresolver.acme.dnschallenge.provider=gcloud'
+      - '--certificatesresolvers.myresolver.acme.email=example@example.com'
+      - '--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json'
+    ports:
+      - '443:443'
+      - '3000:3000'
+    volumes:
+      - '/share/letsencrypt:/letsencrypt'   # Create a share folder named `letsencrypt`
+      - 'traefik:/traefik'
+      - '/var/run/docker.sock:/var/run/docker.sock:ro'
+    extra_hosts:
+      - 'gateway.docker.internal:host-gateway'
+
+  vaultwarden:
+    image: 'vaultwarden/server'
+    restart: 'always'
+    volumes:
+      - '/share/vaultwarden:/data'   # Create a share folder named `vaultwarden`
+    environment:
+      - 'WEBSOCKET_ENABLED=true'
+      - 'SIGNUPS_ALLOWED=true'       # Set to false when you want to disable account registration
+      - 'SIGNUPS_VERIFY=true'
+      - 'DOMAIN=https://vaultwarden.example.com'
+      - 'SMTP_HOST=smtp.mailgun.org'
+      - 'SMTP_FROM=postmaster@YOUR_DOMAIN_NAME'
+      - 'SMTP_FROM_NAME=Vaultwarden'
+      - 'SMTP_PORT=587'
+      - 'SMTP_SSL=true'
+      - 'SMTP_USERNAME=postmaster@YOUR_DOMAIN_NAME'
+      - 'SMTP_PASSWORD=xxxxxxxxxxxxxxxxxxxxxxxxxxx'
+      - 'SMTP_TIMEOUT=15'
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.vaultwarden-ui.rule=Host(`vaultwarden.example.com`)'
+      - 'traefik.http.routers.vaultwarden-ui.service=vaultwarden-ui'
+      - 'traefik.http.routers.vaultwarden-ui.tls.certresolver=myresolver'
+      - 'traefik.http.routers.vaultwarden-ui.tls.domains[0].main=*.example.com'
+      - 'traefik.http.services.vaultwarden-ui.loadbalancer.server.port=80'
+      - 'traefik.http.routers.vaultwarden-websocket.rule=Host(`vaultwarden.example.com`) && Path(`/notifications/hub`)'
+      - 'traefik.http.routers.vaultwarden-websocket.service=vaultwarden-websocket'
+      - 'traefik.http.routers.vaultwarden-websocket.tls.certresolver=myresolver'
+      - 'traefik.http.routers.vaultwarden-websocket.tls.domains[0].main=*.example.com'
+      - 'traefik.http.services.vaultwarden-websocket.loadbalancer.server.port=3012'
+      - 'traefik.http.routers.vaultwarden-negotiate.rule=Host(`vaultwarden.example.com`) && Path(`/notifications/hub/negotiate`)'
+      - 'traefik.http.routers.vaultwarden-negotiate.service=vaultwarden-ui'
+      - 'traefik.http.routers.vaultwarden-negotiate.tls.certresolver=myresolver'
+      - 'traefik.http.routers.vaultwarden-negotiate.tls.domains[0].main=*.example.com'
+
+volumes:
+  traefik:
