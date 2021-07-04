@@ -44,7 +44,7 @@ services:
       - '--entrypoints.websecure.address=:443'
       - '--entrypoints.traefik.address=:3000'
       - '--certificatesresolvers.myresolver.acme.tlschallenge=true'
-      - '--certificatesresolvers.myresolver.acme.email=example@gmail.com'
+      - '--certificatesresolvers.myresolver.acme.email=root@example.com'
       - '--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json'
     ports:
       - '443:443'
@@ -63,7 +63,7 @@ services:
       - '/share/vaultwarden:/data'   # Create a share folder named `vaultwarden`
     environment:
       - 'WEBSOCKET_ENABLED=true'
-      - 'SIGNUPS_ALLOWED=false'      # Set to false when you want to disable account registration
+      - 'SIGNUPS_ALLOWED=true'       # Set to false when you want to disable account registration
       - 'SIGNUPS_VERIFY=true'
       - 'DOMAIN=https://vaultwarden.example.com'
       - 'SMTP_HOST=smtp.mailgun.org'
