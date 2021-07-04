@@ -20,13 +20,13 @@ services:
             service: nasweb
             tls:
               certresolver: myresolver
-          defaulthost:
+          default:
             rule: PathPrefix(`/`)
             service: nasweb
             tls:
               certresolver: myresolver
               domains:
-                main: example.myqnapcloud.com
+                - main: example.myqnapcloud.com
       ' > /traefik/config.yml && nc -l -p 3000"
 
   traefik:
